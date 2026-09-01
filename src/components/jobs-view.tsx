@@ -19,7 +19,7 @@ export function JobsView() {
 
   if (jobs.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-white/40">
+      <div className="flex w-full flex-1 items-center justify-center text-sm text-white/40">
         No jobs yet. Process or download from Photo Shelter, AP Images, or Local.
       </div>
     );
@@ -28,7 +28,7 @@ export function JobsView() {
   return (
     <div className="min-h-0 w-full flex-1 overflow-y-auto p-6">
       <p className="text-[11px] font-medium tracking-[0.16em] text-[#c8a24a] uppercase">
-        Live jobs · WebSocket
+        Live jobs · status stream
       </p>
       <div className="mt-4 space-y-4">
         {jobs.map((job) => (

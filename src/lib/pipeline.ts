@@ -37,7 +37,7 @@ export function pipelineFor(assets: Asset[], mode: ActionMode): PipelineStep[] {
     {
       status: "transferring",
       ms: 900,
-      message: (n) => `Copying ${n} asset${n === 1 ? "" : "s"} into NFL AWS`,
+        message: (n) => `Copying ${n} asset${n === 1 ? "" : "s"} into storage`,
     },
   ];
 
@@ -52,7 +52,7 @@ export function pipelineFor(assets: Asset[], mode: ActionMode): PipelineStep[] {
   steps.push({
     status: "cutting_out",
     ms: 1600,
-    message: (n) => `Adobe cutout API · ${n} frame${n === 1 ? "" : "s"}`,
+    message: (n) => `Cutout · ${n} frame${n === 1 ? "" : "s"}`,
   });
 
   if (kinds.has("headshot")) {

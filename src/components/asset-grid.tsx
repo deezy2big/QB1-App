@@ -51,12 +51,21 @@ export function AssetGrid({ assets }: { assets: Asset[] }) {
             )}
           >
             <div className="relative aspect-[5/6] bg-[#0b0d12]">
-              <Portrait
-                name={asset.player ?? asset.name}
-                number={asset.number}
-                teamId={asset.teamId}
-                kind={asset.kind}
-              />
+              {asset.source === "local" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`/api/assets/${asset.id}/file`}
+                  alt={asset.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Portrait
+                  name={asset.player ?? asset.name}
+                  number={asset.number}
+                  teamId={asset.teamId}
+                  kind={asset.kind}
+                />
+              )}
               {asset.kind === "movie" && (
                 <Film className="absolute top-2 right-2 size-4 text-white/80" />
               )}

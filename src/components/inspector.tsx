@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Portrait } from "@/lib/portrait";
 import { formatBytes, teamById } from "@/lib/data";
+import { RASTER_H, TARGET_PUPIL_Y } from "@/lib/portrait-svg";
 import { statusLabel } from "@/lib/pipeline";
 import { useStore } from "@/lib/store";
 import type { Asset } from "@/lib/types";
@@ -22,6 +23,7 @@ export function Inspector() {
     removeFromQueue,
     clearQueue,
     jobs,
+    processedRevision,
   } = useStore();
 
   const pool = view === "ap" ? queueIds : selectedIds;
@@ -29,12 +31,7 @@ export function Inspector() {
   const single = assets.length === 1 ? assets[0] : null;
   const team = teamById(single?.teamId);
   const latest = jobs[0];
-  const processed =
-    latest &&
-    latest.status === "complete" &&
-    latest.mode === "process" &&
-    single &&
-    latest.assetIds.includes(single.id);
+  const processedAt = single ? processedRevision(single.id) : null;
 
   function go() {
     if (assets.length === 0) return;
@@ -59,15 +56,45 @@ export function Inspector() {
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {single ? (
           <div>
-            <div className="aspect-[5/6] overflow-hidden rounded-md border border-white/10 bg-black">
-              <Portrait
-                name={single.player ?? single.name}
-                number={single.number}
-                teamId={single.teamId}
-                kind={single.kind}
-                cutout={Boolean(processed)}
-                aligned={Boolean(processed && single.kind === "headshot")}
-              />
+            <div
+              className="relative aspect-[5/6] overflow-hidden rounded-md border border-white/10"
+              style={
+                processedAt
+                  ? {
+                      backgroundImage:
+                        "linear-gradient(45deg,#3a3a3a 25%,transparent 25%),linear-gradient(-45deg,#3a3a3a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#3a3a3a 75%),linear-gradient(-45deg,transparent 75%,#3a3a3a 75%)",
+                      backgroundSize: "16px 16px",
+                      backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
+                      backgroundColor: "#2a2a2a",
+                    }
+                  : { background: "#000" }
+              }
+            >
+              {processedAt || single.source === "local" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={
+                    processedAt
+                      ? `/api/assets/${single.id}/file?variant=processed&t=${processedAt}`
+                      : `/api/assets/${single.id}/file`
+                  }
+                  alt={single.name}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <Portrait
+                  name={single.player ?? single.name}
+                  number={single.number}
+                  teamId={single.teamId}
+                  kind={single.kind}
+                />
+              )}
+              {processedAt && single.kind === "headshot" && (
+                <div
+                  className="pointer-events-none absolute inset-x-0 border-t border-[#69BE28]/80"
+                  style={{ top: `${(TARGET_PUPIL_Y / RASTER_H) * 100}%` }}
+                />
+              )}
             </div>
             <h3 className="mt-3 text-sm font-semibold text-white">{single.name}</h3>
             <dl className="mt-2 space-y-1 text-xs text-white/60">
@@ -115,9 +142,8 @@ export function Inspector() {
           </div>
         ) : (
           <p className="text-sm leading-relaxed text-white/45">
-            Process runs the Adobe cutout pipeline (and pupil alignment on
-            headshots). Download pulls the original from Photo Shelter or AP
-            Images without processing.
+            Process runs cutout (local stand-in for Adobe) and pupil alignment
+            on headshots. Download copies the original without processing.
           </p>
         )}
 

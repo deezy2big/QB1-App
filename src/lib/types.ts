@@ -37,6 +37,7 @@ export type Asset = {
   height: number;
   bytes: number;
   takenAt?: string;
+  fileKey?: string;
 };
 
 export type Folder = {
@@ -53,6 +54,14 @@ export type JobEvent = {
   message: string;
 };
 
+export type JobOutput = {
+  assetId: string;
+  originalKey: string;
+  processedKey?: string;
+  sequencePrefix?: string;
+  frameCount?: number;
+};
+
 export type Job = {
   id: string;
   createdAt: number;
@@ -62,6 +71,8 @@ export type Job = {
   events: JobEvent[];
   submittedBy: string;
   office: string;
+  outputs: JobOutput[];
+  error?: string;
 };
 
 export type Session = {

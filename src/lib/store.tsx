@@ -4,18 +4,18 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { AP_ASSETS, ASSETS } from "./data";
-import { pipelineFor } from "./pipeline";
 import type {
   ActionMode,
   Asset,
   Job,
-  JobEvent,
   Session,
   ViewId,
 } from "./types";
@@ -42,15 +42,16 @@ type Store = {
   mode: ActionMode;
   setMode: (mode: ActionMode) => void;
   jobs: Job[];
-  submitJob: (assetIds: string[], extras?: Asset[]) => void;
+  submitJob: (assetIds: string[]) => Promise<void>;
   localAssets: Asset[];
-  addLocalFiles: (files: File[]) => void;
+  addLocalFiles: (files: File[]) => Promise<void>;
   apQuery: string;
   setApQuery: (q: string) => void;
   apPage: number;
   setApPage: (p: number) => void;
   getAsset: (id: string) => Asset | undefined;
   allAssets: Asset[];
+  processedRevision: (assetId: string) => number | null;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -66,6 +67,12 @@ function loadSession(): Session | null {
   }
 }
 
+function upsertJob(list: Job[], job: Job) {
+  return [job, ...list.filter((j) => j.id !== job.id)].sort(
+    (a, b) => b.createdAt - a.createdAt,
+  );
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(loadSession);
   const [view, setView] = useState<ViewId>("photoshelter");
@@ -78,8 +85,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [localAssets, setLocalAssets] = useState<Asset[]>([]);
   const [apQuery, setApQuery] = useState("");
   const [apPage, setApPage] = useState(1);
-  const localUrls = useRef<Map<string, string>>(new Map());
-  const jobTimers = useRef<number[]>([]);
+  const sources = useRef(new Map<string, EventSource>());
 
   const allAssets = useMemo(
     () => [...ASSETS, ...AP_ASSETS, ...localAssets],
@@ -90,6 +96,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string) => allAssets.find((a) => a.id === id),
     [allAssets],
   );
+
+  const watchJob = useCallback((id: string) => {
+    if (sources.current.has(id)) return;
+    const es = new EventSource(`/api/jobs/${id}/events`);
+    es.onmessage = (ev) => {
+      const data = JSON.parse(ev.data) as { job: Job };
+      setJobs((cur) => upsertJob(cur, data.job));
+      if (data.job.status === "complete" || data.job.status === "failed") {
+        es.close();
+        sources.current.delete(id);
+      }
+    };
+    sources.current.set(id, es);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/jobs")
+      .then((r) => r.json())
+      .then((list: Job[]) => {
+        setJobs(list);
+        list
+          .filter((j) => j.status !== "complete" && j.status !== "failed")
+          .forEach((j) => watchJob(j.id));
+      })
+      .catch(() => undefined);
+    fetch("/api/assets/local")
+      .then((r) => r.json())
+      .then((list: Asset[]) => setLocalAssets(list))
+      .catch(() => undefined);
+    const map = sources.current;
+    return () => {
+      for (const es of map.values()) es.close();
+      map.clear();
+    };
+  }, [watchJob]);
 
   const login = useCallback((next: Session) => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(next));
@@ -128,83 +169,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => setQueueIds([]), []);
 
   const submitJob = useCallback(
-    (assetIds: string[], extras: Asset[] = []) => {
+    async (assetIds: string[]) => {
       if (!session || assetIds.length === 0) return;
-      const catalog = [...allAssets, ...extras];
-      const assets = assetIds
-        .map((id) => catalog.find((a) => a.id === id))
-        .filter((a): a is Asset => Boolean(a));
-      const id = `job-${Date.now()}`;
-      const createdAt = Date.now();
-      const first: JobEvent = {
-        at: createdAt,
-        status: "queued",
-        message: `Database record created · status queued`,
-      };
-      const job: Job = {
-        id,
-        createdAt,
-        mode,
-        status: "queued",
-        assetIds,
-        events: [first],
-        submittedBy: session.name,
-        office: session.office,
-      };
-      setJobs((cur) => [job, ...cur]);
-      setView("jobs");
-
-      const steps = pipelineFor(assets, mode);
-      let delay = 0;
-      steps.forEach((step, i) => {
-        delay += step.ms;
-        const handle = window.setTimeout(() => {
-          setJobs((cur) =>
-            cur.map((j) => {
-              if (j.id !== id) return j;
-              const event: JobEvent = {
-                at: Date.now(),
-                status: step.status,
-                message: step.message(
-                  assets.length,
-                  assets.map((a) => a.kind),
-                ),
-              };
-              return {
-                ...j,
-                status: step.status,
-                events: [...j.events, event],
-              };
-            }),
-          );
-        }, delay);
-        jobTimers.current[i] = handle;
-      });
+      try {
+        const res = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            assetIds,
+            mode,
+            submittedBy: session.name,
+            office: session.office,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const job = (await res.json()) as Job;
+        setJobs((cur) => upsertJob(cur, job));
+        setView("jobs");
+        watchJob(job.id);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to start job");
+      }
     },
-    [allAssets, mode, session],
+    [mode, session, watchJob],
   );
 
-  const addLocalFiles = useCallback((files: File[]) => {
-    const added: Asset[] = files.map((file, i) => {
-      const id = `local-${Date.now()}-${i}`;
-      const url = URL.createObjectURL(file);
-      localUrls.current.set(id, url);
-      const movie = /\.(mp4|mov|m4v|webm)$/i.test(file.name);
-      return {
-        id,
-        name: file.name,
-        kind: movie ? "movie" : "action",
-        source: "local",
-        year: new Date().getFullYear(),
-        folderId: "local",
-        width: 1920,
-        height: 1080,
-        bytes: file.size,
-      };
-    });
-    setLocalAssets((cur) => [...added, ...cur]);
-    setSelectedIds(added.map((a) => a.id));
+  const addLocalFiles = useCallback(async (files: File[]) => {
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append("files", f));
+      const res = await fetch("/api/uploads", { method: "POST", body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      const added = (await res.json()) as Asset[];
+      setLocalAssets((cur) => [...added, ...cur]);
+      setSelectedIds(added.map((a) => a.id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    }
   }, []);
+
+  const processedRevision = useCallback(
+    (assetId: string) => {
+      const hit = jobs.find(
+        (j) =>
+          j.status === "complete" &&
+          j.mode === "process" &&
+          j.outputs.some((o) => o.assetId === assetId && o.processedKey),
+      );
+      return hit ? hit.createdAt : null;
+    },
+    [jobs],
+  );
 
   const value = useMemo<Store>(
     () => ({
@@ -241,6 +256,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setApPage,
       getAsset,
       allAssets,
+      processedRevision,
     }),
     [
       addLocalFiles,
@@ -257,7 +273,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       mode,
+      processedRevision,
       queueIds,
+      removeFromQueue,
       selectMany,
       selectOnly,
       selectedIds,
@@ -266,7 +284,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       submitJob,
       toggleSelected,
       view,
-      removeFromQueue,
     ],
   );
 
