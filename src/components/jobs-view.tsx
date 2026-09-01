@@ -26,7 +26,7 @@ export function JobsView() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className="min-h-0 w-full flex-1 overflow-y-auto p-6">
       <p className="text-[11px] font-medium tracking-[0.16em] text-[#c8a24a] uppercase">
         Live jobs · WebSocket
       </p>
