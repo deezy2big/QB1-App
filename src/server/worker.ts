@@ -78,7 +78,6 @@ export async function runJob(jobId: string) {
         await emit(jobId, "sequencing", step.message(assets.length, assets.map((a) => a.kind)));
       } else if (step.status === "cutting_out") {
         for (const out of outputs) {
-          const asset = assets.find((a) => a.id === out.assetId);
           if (out.sequencePrefix && out.frameCount) {
             for (let i = 1; i <= out.frameCount; i++) {
               const name = String(i).padStart(4, "0") + ".png";

@@ -32,14 +32,14 @@ export async function GET(
       .find((o) => o.assetId === id && o.processedKey);
     if (hit?.processedKey) {
       const bytes = await storage.get(hit.processedKey);
-      return new Response(bytes, {
+      return new Response(new Uint8Array(bytes), {
         headers: { "content-type": "image/png", "cache-control": "no-store" },
       });
     }
   }
 
   const bytes = await sourceFor(asset.source).getBytes(id);
-  return new Response(bytes, {
+  return new Response(new Uint8Array(bytes), {
     headers: { "content-type": "image/png", "cache-control": "no-store" },
   });
 }

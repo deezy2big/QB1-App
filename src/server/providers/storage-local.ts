@@ -10,10 +10,11 @@ export class LocalStorage implements StorageProvider {
     return dataPath(key);
   }
 
-  async put(key: string, bytes: Buffer) {
+  async put(key: string, bytes: Buffer, contentType?: string) {
     const full = this.absPath(key);
     await mkdir(path.dirname(full), { recursive: true });
     await writeFile(full, bytes);
+    void contentType;
   }
 
   async get(key: string) {

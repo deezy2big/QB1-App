@@ -5,11 +5,13 @@ import type { PupilPair, VisionProvider } from "./types";
 export class RekognitionVision implements VisionProvider {
   id = "rekognition" as const;
 
-  async findPupils(_bytes: Buffer): Promise<PupilPair> {
+  async findPupils(bytes: Buffer): Promise<PupilPair> {
+    void bytes;
     this.ensure();
   }
 
-  async alignHeadshot(_bytes: Buffer): Promise<Buffer> {
+  async alignHeadshot(bytes: Buffer): Promise<Buffer> {
+    void bytes;
     this.ensure();
   }
 

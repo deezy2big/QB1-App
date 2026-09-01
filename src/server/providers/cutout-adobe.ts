@@ -8,7 +8,8 @@ import type { CutoutProvider } from "./types";
 export class AdobeCutout implements CutoutProvider {
   id = "adobe" as const;
 
-  async removeBackground(_bytes: Buffer): Promise<Buffer> {
+  async removeBackground(bytes: Buffer): Promise<Buffer> {
+    void bytes;
     this.ensure();
   }
 

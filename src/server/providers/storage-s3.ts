@@ -5,16 +5,20 @@ import type { StorageProvider } from "./types";
 export class S3Storage implements StorageProvider {
   id = "s3" as const;
 
-  async put(_key: string, _bytes: Buffer) {
+  async put(key: string, bytes: Buffer) {
+    void key;
+    void bytes;
     this.ensure();
   }
 
-  async get(_key: string): Promise<Buffer> {
+  async get(key: string): Promise<Buffer> {
+    void key;
     this.ensure();
     return Buffer.alloc(0);
   }
 
-  async exists(_key: string) {
+  async exists(key: string) {
+    void key;
     this.ensure();
     return false;
   }

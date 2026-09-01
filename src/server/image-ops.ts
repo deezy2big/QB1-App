@@ -28,7 +28,6 @@ export async function removeBackground(bytes: Buffer): Promise<Buffer> {
     .toBuffer({ resolveWithObject: true });
   const w = info.width;
   const h = info.height;
-  const px = (x: number, y: number) => (y * w + x) * 4;
 
   for (let i = 0; i < data.length; i += 4) {
     if (colorDist(data[i], data[i + 1], data[i + 2], MAGENTA) < 80) {
@@ -106,34 +105,47 @@ export async function findPupils(bytes: Buffer): Promise<PupilPair> {
 }
 
 export async function alignHeadshot(bytes: Buffer, pupils?: PupilPair): Promise<Buffer> {
-  const found = pupils ?? (await findPupils(bytes));
-  const dx = found.right.x - found.left.x;
-  const dy = found.right.y - found.left.y;
-  const dist = Math.hypot(dx, dy) || 1;
-  const targetDist = TARGET_PUPIL_RIGHT_X - TARGET_PUPIL_LEFT_X;
-  const scale = targetDist / dist;
+  const first = pupils ?? (await findPupils(bytes));
+  const angle = Math.atan2(first.right.y - first.left.y, first.right.x - first.left.x);
+  let oriented = bytes;
+  if (Math.abs(angle) > 0.008) {
+    oriented = await sharp(bytes)
+      .ensureAlpha()
+      .rotate((-angle * 180) / Math.PI, {
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toBuffer();
+  }
+
+  const found = await findPupils(oriented);
+  const dist =
+    Math.hypot(found.right.x - found.left.x, found.right.y - found.left.y) || 1;
+  const scale = (TARGET_PUPIL_RIGHT_X - TARGET_PUPIL_LEFT_X) / dist;
   const midX = (found.left.x + found.right.x) / 2;
   const midY = (found.left.y + found.right.y) / 2;
   const targetMidX = (TARGET_PUPIL_LEFT_X + TARGET_PUPIL_RIGHT_X) / 2;
-  const angle = Math.atan2(dy, dx);
 
-  const img = sharp(bytes).ensureAlpha();
-  const meta = await img.metadata();
+  const meta = await sharp(oriented).metadata();
   const scaledW = Math.max(1, Math.round((meta.width ?? RASTER_W) * scale));
   const scaledH = Math.max(1, Math.round((meta.height ?? RASTER_H) * scale));
-  const scaled = await img
-    .resize(scaledW, scaledH)
-    .rotate((-angle * 180) / Math.PI, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
-    .toBuffer();
+  const scaled = await sharp(oriented).ensureAlpha().resize(scaledW, scaledH).png().toBuffer();
 
-  const scaledMeta = await sharp(scaled).metadata();
-  const sw = scaledMeta.width ?? scaledW;
-  const sh = scaledMeta.height ?? scaledH;
-  const newMidX = midX * scale;
-  const newMidY = midY * scale;
-  const left = Math.round(targetMidX - newMidX);
-  const top = Math.round(TARGET_PUPIL_Y - newMidY);
+  const left = Math.round(targetMidX - midX * scale);
+  const top = Math.round(TARGET_PUPIL_Y - midY * scale);
+  return placeOnCanvas(scaled, left, top);
+}
+
+async function placeOnCanvas(input: Buffer, left: number, top: number) {
+  const meta = await sharp(input).metadata();
+  const sw = meta.width ?? 1;
+  const sh = meta.height ?? 1;
+  const srcLeft = Math.max(0, -left);
+  const srcTop = Math.max(0, -top);
+  const dstLeft = Math.max(0, left);
+  const dstTop = Math.max(0, top);
+  const width = Math.min(sw - srcLeft, RASTER_W - dstLeft);
+  const height = Math.min(sh - srcTop, RASTER_H - dstTop);
 
   const canvas = sharp({
     create: {
@@ -144,14 +156,17 @@ export async function alignHeadshot(bytes: Buffer, pupils?: PupilPair): Promise<
     },
   });
 
+  if (width <= 0 || height <= 0) {
+    return canvas.png().toBuffer();
+  }
+
+  const piece = await sharp(input)
+    .extract({ left: srcLeft, top: srcTop, width, height })
+    .png()
+    .toBuffer();
+
   return canvas
-    .composite([
-      {
-        input: scaled,
-        left: Math.min(RASTER_W - 1, Math.max(-sw + 1, left)),
-        top: Math.min(RASTER_H - 1, Math.max(-sh + 1, top)),
-      },
-    ])
+    .composite([{ input: piece, left: dstLeft, top: dstTop }])
     .png()
     .toBuffer();
 }
