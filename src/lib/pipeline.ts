@@ -22,7 +22,7 @@ export function pipelineFor(assets: Asset[], mode: ActionMode): PipelineStep[] {
       {
         status: "complete",
         ms: 200,
-        message: (n) => `Download ready · ${n} file${n === 1 ? "" : "s"}`,
+        message: (n) => `Download ready · ${n} original file${n === 1 ? "" : "s"}`,
       },
     ];
   }
@@ -67,7 +67,7 @@ export function pipelineFor(assets: Asset[], mode: ActionMode): PipelineStep[] {
   steps.push({
     status: "complete",
     ms: 250,
-    message: (n) => `Processed ${n} asset${n === 1 ? "" : "s"}`,
+    message: () => "Processing complete",
   });
 
   return steps;

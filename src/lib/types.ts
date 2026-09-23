@@ -71,6 +71,7 @@ export type Job = {
   events: JobEvent[];
   submittedBy: string;
   office: string;
+  source?: SourceKind;
   outputs: JobOutput[];
   error?: string;
 };

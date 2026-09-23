@@ -43,6 +43,8 @@ type Store = {
   setMode: (mode: ActionMode) => void;
   jobs: Job[];
   submitJob: (assetIds: string[]) => Promise<void>;
+  operatorName: string;
+  setOperatorName: (name: string) => void;
   localAssets: Asset[];
   addLocalFiles: (files: File[]) => Promise<void>;
   apQuery: string;
@@ -56,6 +58,23 @@ type Store = {
 
 const Ctx = createContext<Store | null>(null);
 const SESSION_KEY = "qb1-session";
+const OPERATOR_KEY = "qb1-operator";
+
+function loadOperator() {
+  if (typeof window === "undefined") return "Local operator";
+  return localStorage.getItem(OPERATOR_KEY)?.trim() || "Local operator";
+}
+
+async function readError(res: Response) {
+  const text = await res.text();
+  try {
+    const body = JSON.parse(text) as { error?: string };
+    if (body.error) return body.error;
+  } catch {
+    /* response was not JSON */
+  }
+  return text || res.statusText;
+}
 
 function loadSession(): Session | null {
   if (typeof window === "undefined") return null;
@@ -75,7 +94,8 @@ function upsertJob(list: Job[], job: Job) {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(loadSession);
-  const [view, setView] = useState<ViewId>("photoshelter");
+  const [view, setView] = useState<ViewId>("upload");
+  const [operatorName, setOperatorNameState] = useState(loadOperator);
   const [folderId, setFolderId] = useState("hs-2025");
   const [showHeadshotBadges, setShowHeadshotBadges] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -132,6 +152,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [watchJob]);
 
+  const jobInFlight = jobs.some((job) => job.status !== "complete" && job.status !== "failed");
+  useEffect(() => {
+    if (!jobInFlight) return;
+    const timer = setInterval(() => {
+      fetch("/api/jobs")
+        .then((r) => r.json())
+        .then((list: Job[]) => {
+          setJobs(list);
+          list
+            .filter((job) => job.status !== "complete" && job.status !== "failed")
+            .forEach((job) => watchJob(job.id));
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [jobInFlight, watchJob]);
+
+  const setOperatorName = useCallback((name: string) => {
+    localStorage.setItem(OPERATOR_KEY, name);
+    setOperatorNameState(name);
+  }, []);
+
   const login = useCallback((next: Session) => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(next));
     setSession(next);
@@ -170,7 +212,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const submitJob = useCallback(
     async (assetIds: string[]) => {
-      if (!session || assetIds.length === 0) return;
+      if (assetIds.length === 0) return;
       try {
         const res = await fetch("/api/jobs", {
           method: "POST",
@@ -178,20 +220,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({
             assetIds,
             mode,
-            submittedBy: session.name,
-            office: session.office,
+            submittedBy: operatorName.trim() || "Local operator",
+            office: "Local",
           }),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await readError(res));
         const job = (await res.json()) as Job;
         setJobs((cur) => upsertJob(cur, job));
-        setView("jobs");
         watchJob(job.id);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to start job");
       }
     },
-    [mode, session, watchJob],
+    [mode, operatorName, watchJob],
   );
 
   const addLocalFiles = useCallback(async (files: File[]) => {
@@ -199,9 +240,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
       const res = await fetch("/api/uploads", { method: "POST", body: fd });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await readError(res));
       const added = (await res.json()) as Asset[];
-      setLocalAssets((cur) => [...added, ...cur]);
+      setLocalAssets((cur) => [...added, ...cur.filter((asset) => !added.some((item) => item.id === asset.id))]);
       setSelectedIds(added.map((a) => a.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -245,6 +286,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setMode,
       jobs,
       submitJob,
+      operatorName,
+      setOperatorName,
       localAssets,
       addLocalFiles,
       apQuery,
@@ -273,12 +316,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       mode,
+      operatorName,
       processedRevision,
       queueIds,
       removeFromQueue,
       selectMany,
       selectOnly,
       selectedIds,
+      setOperatorName,
       session,
       showHeadshotBadges,
       submitJob,

@@ -1,5 +1,7 @@
 # QB1 Reconstruction Spec
 
+This file is the earlier reconstruction guess (gold-and-red shell, NFL email gate, seeded analytics, simulated PhotoShelter and AP libraries). The running app no longer follows that shell. Local Ingest is the working path. PhotoShelter, Associated Press, Adobe, AWS, and the dashboard are not connected here.
+
 Source: NFL GFX Specialized Platform Sync, 29 April 2026 (Shawn Baden walkthrough).  
 Scope: QB1 web image-processing app only. Adobe After Effects panel is out of scope.
 
