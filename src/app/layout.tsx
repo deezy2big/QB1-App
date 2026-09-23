@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -13,18 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QB1 · NFL Media Design",
-  description:
-    "League image processing — Photo Shelter, AP Images, cutouts, and analytics.",
+  title: "qb1",
+  description: "Local image ingest, background removal, and original downloads.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex h-full min-h-full flex-col bg-[#0b0d12] text-white">
+      <body className="flex h-full min-h-full flex-col bg-[#070708] text-white">
         {children}
       </body>
     </html>

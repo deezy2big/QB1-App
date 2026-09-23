@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   agentRules: false,
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "@imgly/background-removal-node", "onnxruntime-node"],
 };
 
 export default nextConfig;
